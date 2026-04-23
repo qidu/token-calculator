@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Token Calculator</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.4;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      .app {
+        max-width: 1100px;
+        margin: 0 auto;
+        display: grid;
+        gap: 20px;
+      }
+      .card {
+        background: #111827;
+        border: 1px solid #243045;
+        border-radius: 16px;
+        padding: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      }
+      h1, h2, h3, p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 28px;
+      }
+      .muted {
+        color: #94a3b8;
+      }
+      .grid {
+        display: grid;
+        gap: 14px;
+      }
+      .grid.cols-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .grid.cols-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 14px;
+        color: #cbd5e1;
+      }
+      input, select {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #334155;
+        background: #0b1220;
+        color: #e2e8f0;
+        outline: none;
+      }
+      input:focus, select:focus {
+        border-color: #60a5fa;
+        box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+      }
+      .results {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+      }
+      .result {
+        padding: 16px;
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(59,130,246,0.16), rgba(59,130,246,0.05));
+        border: 1px solid rgba(96,165,250,0.25);
+      }
+      .result strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 22px;
+      }
+      .preview {
+        padding: 12px;
+        border-radius: 12px;
+        background: #0b1220;
+        border: 1px solid #243045;
+        color: #cbd5e1;
+        white-space: pre-wrap;
+      }
+      .model-list {
+        max-height: 320px;
+        overflow: auto;
+        border: 1px solid #243045;
+        border-radius: 12px;
+        background: #0b1220;
+      }
+      .model-option {
+        width: 100%;
+        text-align: left;
+        padding: 10px 12px;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        border-bottom: 1px solid rgba(36, 48, 69, 0.7);
+      }
+      .model-option:hover,
+      .model-option[aria-selected="true"] {
+        background: rgba(59, 130, 246, 0.14);
+      }
+      .model-option:last-child {
+        border-bottom: 0;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .small {
+        font-size: 13px;
+      }
+      .value {
+        font-variant-numeric: tabular-nums;
+      }
+      @media (max-width: 900px) {
+        .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="card">
+        <div class="grid" style="gap: 8px;">
+          <h1>Token Calculator</h1>
+          <p class="muted">Load a model, set usage inputs, and calculate token cost instantly.</p>
+          <div class="row" id="loadBar" style="display:none; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px;">
+            <span class="small muted" id="loadStatus">models.json couldn't be loaded automatically from ./models.json</span>
+            <button id="loadFileButton" type="button" style="padding: 10px 14px; border-radius: 10px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; cursor: pointer;">Load local models.json</button>
+            <input id="loadFileInput" type="file" accept="application/json,.json" hidden />
+          </div>
+        </div>
+      </section>
+
+      <section class="card grid cols-2">
+        <div class="grid" style="gap: 14px;">
+          <label>
+            Search model id or name
+            <input id="modelSearch" type="search" placeholder="Type partial id, name, or provider" autocomplete="off" />
+          </label>
+          <div>
+            <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+              <h2 style="font-size: 18px;">Models</h2>
+              <span class="small muted" id="modelCount"></span>
+            </div>
+            <div class="model-list" id="modelList" role="listbox" aria-label="Model selection"></div>
+          </div>
+        </div>
+
+        <div class="grid" style="gap: 14px;">
+          <h2 style="font-size: 18px;">Selected model</h2>
+          <div class="preview" id="modelPreview">Choose a model to see details.</div>
+          <div class="grid cols-2">
+            <label>
+              Input price ($)
+              <input id="inputPrice" type="number" step="any" min="0" />
+            </label>
+            <label>
+              Output price ($)
+              <input id="outputPrice" type="number" step="any" min="0" />
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="card grid cols-3">
+        <label>
+          Context Ratio
+          <input id="contextRatio" type="number" step="any" min="0.0001" value="50" />
+        </label>
+        <label>
+          TPM (10K)
+          <input id="tpm" type="number" step="any" min="0" value="1" />
+        </label>
+        <label>
+          Time (m)
+          <input id="time" type="number" step="any" min="0" value="60" />
+        </label>
+        <label>
+          Exchange Rate
+          <input id="exchangeRate" type="number" step="any" min="0" value="7.0" />
+        </label>
+        <label>
+          Discount
+          <input id="discount" type="number" step="any" min="0" value="0.99" />
+        </label>
+      </section>
+
+      <section class="card">
+        <h2 style="font-size: 18px; margin-bottom: 14px;">Results</h2>
+        <div class="results">
+          <div class="result">
+            <span class="muted small">Result #1</span>
+            <strong class="value" id="tokensResult">0 M</strong>
+            <div class="small muted">Tokens = TPM × Time × TOKENS_SCALE</div>
+          </div>
+          <div class="result">
+            <span class="muted small">Result #2</span>
+            <strong class="value" id="chargeResult">0 $</strong>
+            <div class="small muted">Charge Fee = Tokens × Input_Price + Tokens / Context_Ratio × Output_Price</div>
+          </div>
+          <div class="result">
+            <span class="muted small">Result #3</span>
+            <strong class="value" id="discountResult">0 $</strong>
+            <div class="small muted">Charge after Discount = Charge Fee × Discount</div>
+          </div>
+          <div class="result">
+            <span class="muted small">Converted total</span>
+            <strong class="value" id="convertedResult">0</strong>
+            <div class="small muted">Converted total = Charge Fee × Discount × Exchange Rate</div>          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        models: [],
+        filtered: [],
+        selectedId: null,
+      };
+
+      const el = {
+        modelSearch: document.getElementById('modelSearch'),
+        modelList: document.getElementById('modelList'),
+        modelCount: document.getElementById('modelCount'),
+        modelPreview: document.getElementById('modelPreview'),
+        inputPrice: document.getElementById('inputPrice'),
+        outputPrice: document.getElementById('outputPrice'),
+        contextRatio: document.getElementById('contextRatio'),
+        tpm: document.getElementById('tpm'),
+        time: document.getElementById('time'),
+        exchangeRate: document.getElementById('exchangeRate'),
+        discount: document.getElementById('discount'),
+        loadBar: document.getElementById('loadBar'),
+        loadStatus: document.getElementById('loadStatus'),
+        loadFileButton: document.getElementById('loadFileButton'),
+        loadFileInput: document.getElementById('loadFileInput'),
+        tokensResult: document.getElementById('tokensResult'),
+        chargeResult: document.getElementById('chargeResult'),
+        discountResult: document.getElementById('discountResult'),
+        convertedResult: document.getElementById('convertedResult'),
+      };
+
+      const PRICE_SCALE = 1000000;
+      const TOKENS_SCALE = 0.01;
+
+      const formatNumber = (value) => {
+        if (!Number.isFinite(value)) return '0';
+        return new Intl.NumberFormat('en-US', {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 8,
+        }).format(value);
+      };
+
+      const formatMoney = (value) => {
+        if (!Number.isFinite(value)) return '0.00';
+        return new Intl.NumberFormat('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 6,
+        }).format(value);
+      };
+
+      const getNumber = (node) => Number(node.value || 0);
+
+      const matchesSearch = (model, query) => {
+        const text = `${model.id} ${model.name || ''} ${model.canonical_slug || ''} ${model.description || ''}`.toLowerCase();
+        return text.includes(query.toLowerCase());
+      };
+
+      const normalizeModels = (data) => {
+        if (Array.isArray(data?.data)) return data.data;
+        if (Array.isArray(data)) return data;
+        return [];
+      };
+
+      const setModels = (models, sourceLabel) => {
+        state.models = models;
+        state.filtered = models;
+        el.loadBar.style.display = 'none';
+        el.modelSearch.disabled = false;
+        el.loadStatus.textContent = sourceLabel;
+        renderModels();
+        if (state.models.length > 0) {
+          selectModel(state.models[0].id);
+        } else {
+          updatePreview(null);
+          updateResults();
+        }
+      };
+
+      const renderModels = () => {
+        const query = el.modelSearch.value.trim();
+        state.filtered = query ? state.models.filter((model) => matchesSearch(model, query)) : state.models;
+        el.modelCount.textContent = `${state.filtered.length} / ${state.models.length}`;
+        el.modelList.innerHTML = state.filtered.map((model) => {
+          const selected = model.id === state.selectedId;
+          const pricing = model.pricing || {};
+          return `
+            <button type="button" class="model-option" role="option" aria-selected="${selected}" data-id="${model.id}">
+              <div class="row" style="justify-content: space-between; align-items: baseline; gap: 16px;">
+                <strong>${model.id}</strong>
+                <span class="small muted">${model.context_length ? `ctx ${formatNumber(model.context_length)}` : ''}</span>
+              </div>
+              <div class="small muted">${model.name || ''}</div>
+              <div class="small muted">prompt ${pricing.prompt ?? '-'} | completion ${pricing.completion ?? '-'}</div>
+            </button>
+          `;
+        }).join('') || '<div class="preview">No models match your search.</div>';
+
+        el.modelList.querySelectorAll('.model-option').forEach((button) => {
+          button.addEventListener('click', () => selectModel(button.dataset.id));
+        });
+      };
+
+      const updatePreview = (model) => {
+        if (!model) {
+          el.modelPreview.textContent = 'Choose a model to see details.';
+          return;
+        }
+        el.modelPreview.textContent = [
+          `id: ${model.id}`,
+          `name: ${model.name || '-'}`,
+          `context_length: ${formatNumber(model.context_length || 0)}`,
+          `prompt: ${model.pricing?.prompt ?? '-'}`,
+          `completion: ${model.pricing?.completion ?? '-'}`,
+          `canonical_slug: ${model.canonical_slug || '-'}`,
+        ].join('\n');
+      };
+
+      const selectModel = (id) => {
+        const model = state.models.find((item) => item.id === id);
+        if (!model) return;
+        state.selectedId = model.id;
+        el.inputPrice.value = (Number(model.pricing?.prompt ?? 0) * PRICE_SCALE).toString();
+        el.outputPrice.value = (Number(model.pricing?.completion ?? 0) * PRICE_SCALE).toString();
+        el.modelSearch.value = model.id;
+        updatePreview(model);
+        renderModels();
+        updateResults();
+      };
+
+      const updateResults = () => {
+        const tokens = getNumber(el.tpm) * getNumber(el.time) * TOKENS_SCALE;
+        const contextRatio = getNumber(el.contextRatio) || 1;
+        const inputPrice = getNumber(el.inputPrice) / PRICE_SCALE;
+        const outputPrice = getNumber(el.outputPrice) / PRICE_SCALE;
+        const chargeFee = (tokens * inputPrice + (tokens / contextRatio) * outputPrice) * PRICE_SCALE;
+        const discount = getNumber(el.discount);
+        const chargeAfterDiscount = chargeFee * discount;
+        const exchangeRate = getNumber(el.exchangeRate);
+        const converted = chargeFee * discount * exchangeRate;
+
+        el.tokensResult.textContent = `${formatNumber(tokens)} M`;
+        el.chargeResult.textContent = `${formatMoney(chargeFee)} $`;
+        el.discountResult.textContent = `${formatMoney(chargeAfterDiscount)} $`;
+        el.convertedResult.textContent = formatMoney(converted);
+      };
+
+      const loadModelsFromRemote = async () => {
+        const response = await fetch('https://openrouter.ai/api/v1/models');
+        return normalizeModels(await response.json());
+      };
+
+      const loadModelsFromFile = async () => {
+        const response = await fetch('./models.json');
+        return normalizeModels(await response.json());
+      };
+
+      const loadModels = async () => {
+        try {
+          const models = await loadModelsFromFile();
+          setModels(models, 'Loaded from local models.json.');
+        } catch (fileError) {
+          el.loadBar.style.display = 'flex';
+          el.modelSearch.disabled = true;
+          el.loadStatus.textContent = 'Local models.json could not be loaded from file://. Load it manually or use the remote source.';
+
+          try {
+            const models = await loadModelsFromRemote();
+            setModels(models, 'Loaded from https://openrouter.ai/api/v1/models.');
+          } catch (remoteError) {
+            el.loadBar.style.display = 'flex';
+            el.modelSearch.disabled = true;
+            el.modelPreview.textContent = `Failed to load models: ${fileError.message}. Remote fallback failed: ${remoteError.message}`;
+            el.modelCount.textContent = '0 / 0';
+          }
+        }
+      };
+
+      [el.modelSearch, el.inputPrice, el.outputPrice, el.contextRatio, el.tpm, el.time, el.exchangeRate, el.discount]
+        .forEach((node) => node.addEventListener('input', () => {
+          if (node === el.modelSearch) {
+            renderModels();
+            return;
+          }
+          updateResults();
+        }));
+
+      el.loadFileButton.addEventListener('click', () => el.loadFileInput.click());
+      el.loadFileInput.addEventListener('change', async () => {
+        const file = el.loadFileInput.files?.[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          setModels(normalizeModels(JSON.parse(text)), 'Loaded from local file upload.');
+        } catch (error) {
+          el.loadStatus.textContent = `Could not read uploaded file: ${error.message}`;
+        }
+      });
+
+      loadModels().catch((error) => {
+        el.modelPreview.textContent = `Failed to load models: ${error.message}`;
+        el.modelCount.textContent = '0 / 0';
+      });
+    </script>
+  </body>
+</html>
