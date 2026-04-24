@@ -101,6 +101,18 @@
         border-radius: 12px;
         background: #0b1220;
       }
+      .spinner {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        border: 2px solid rgba(148, 163, 184, 0.35);
+        border-top-color: #60a5fa;
+        animation: spin 0.8s linear infinite;
+        flex: none;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
       .model-option {
         width: 100%;
         text-align: left;
@@ -160,7 +172,7 @@
           <h1>Token Calculator</h1>
           <p class="muted">Load a model, set usage inputs, and calculate token cost instantly.</p>
           <div class="row" id="loadBar" style="display:none; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px;">
-            <span class="small muted" id="loadStatus">models.json couldn't be loaded automatically from ./models.json</span>
+            <span class="small muted" id="loadStatus"><span class="spinner" aria-hidden="true"></span><span id="loadStatusText">Loading models...</span></span>
             <button id="loadFileButton" type="button" style="padding: 10px 14px; border-radius: 10px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; cursor: pointer;">Load local models.json</button>
             <input id="loadFileInput" type="file" accept="application/json,.json" hidden />
           </div>
@@ -187,11 +199,11 @@
           <div class="preview" id="modelPreview">Choose a model to see details.</div>
           <div class="grid cols-2">
             <label>
-              Input price ($)
+              Input price ($/M)
               <input id="inputPrice" type="number" step="any" min="0" />
             </label>
             <label>
-              Output price ($)
+              Output price ($/M)
               <input id="outputPrice" type="number" step="any" min="0" />
             </label>
           </div>
@@ -200,7 +212,7 @@
 
       <section class="card grid cols-3">
         <label>
-          Context Ratio (input length : output length)
+          Context Ratio (input_length : output_length)
           <input id="contextRatio" type="number" step="any" min="0.0001" value="50" />
         </label>
         <label>
@@ -225,22 +237,22 @@
         <h2 style="font-size: 18px; margin-bottom: 14px;">Results</h2>
         <div class="results">
           <div class="result">
-            <span class="muted small">Result 1</span>
+            <span class="muted small">1. Total Tokens (Million)</span>
             <strong class="value" id="tokensResult">0 M</strong>
             <div class="small muted">Tokens = TPM × Time × TOKENS_SCALE</div>
           </div>
           <div class="result">
-            <span class="muted small">Result 2</span>
+            <span class="muted small">2. Charge (no discount) </span>
             <strong class="value" id="chargeResult">0 $</strong>
             <div class="small muted">Charge Fee = Tokens × Input_Price + Tokens / Context_Ratio × Output_Price</div>
           </div>
           <div class="result">
-            <span class="muted small">Result 3</span>
+            <span class="muted small">3. Charge (with discount)</span>
             <strong class="value" id="discountResult">0 $</strong>
             <div class="small muted">Charge after Discount = Charge Fee × Discount</div>
           </div>
           <div class="result">
-            <span class="muted small">Converted Total</span>
+            <span class="muted small">4. Charge (in RMB) </span>
             <strong class="value" id="convertedResult">0 ￥</strong>
             <div class="small muted">Converted Total = Charge Fee × Discount × Exchange Rate</div>          </div>
         </div>
@@ -268,6 +280,7 @@
         discount: document.getElementById('discount'),
         loadBar: document.getElementById('loadBar'),
         loadStatus: document.getElementById('loadStatus'),
+        loadStatusText: document.getElementById('loadStatusText'),
         loadFileButton: document.getElementById('loadFileButton'),
         loadFileInput: document.getElementById('loadFileInput'),
         tokensResult: document.getElementById('tokensResult'),
@@ -310,16 +323,14 @@
       const setModels = (models, sourceLabel) => {
         state.models = models;
         state.filtered = models;
+        state.selectedId = null;
         el.loadBar.style.display = 'none';
         el.modelSearch.disabled = false;
-        el.loadStatus.textContent = sourceLabel;
+        el.loadStatusText.textContent = sourceLabel;
+        el.modelSearch.value = '';
         renderModels();
-        if (state.models.length > 0) {
-          selectModel(state.models[0].id);
-        } else {
-          updatePreview(null);
-          updateResults();
-        }
+        updatePreview(null);
+        updateResults();
       };
 
       const renderModels = () => {
@@ -333,10 +344,10 @@
             <button type="button" class="model-option" role="option" aria-selected="${selected}" data-id="${model.id}">
               <div class="row" style="justify-content: space-between; align-items: baseline; gap: 16px;">
                 <strong>${model.id}</strong>
-                <span class="small muted">${model.context_length ? `ctx ${formatNumber(model.context_length)}` : ''}</span>
+                <span class="small muted">${model.context_length ? `CTX ${formatNumber(model.context_length)}` : ''}</span>
               </div>
               <div class="small muted">${model.name || ''}</div>
-              <div class="small muted">prompt ${pricing.prompt ?? '-'} | completion ${pricing.completion ?? '-'}</div>
+              <div class="small muted">Prompt ${pricing.prompt ?? '-'} | Completion ${pricing.completion ?? '-'}</div>
             </button>
           `;
         }).join('') || '<div class="preview">No models match your search.</div>';
@@ -352,12 +363,12 @@
           return;
         }
         el.modelPreview.textContent = [
-          `id: ${model.id}`,
-          `name: ${model.name || '-'}`,
-          `canonical_slug: ${model.canonical_slug || '-'}`,
-          `context_length: ${formatNumber(model.context_length || 0)}`,
-          `prompt(input): ${model.pricing?.prompt ?? '-'}`,
-          `completion(output): ${model.pricing?.completion ?? '-'}`,
+          `ID: ${model.id}`,
+          `Name: ${model.name || '-'}`,
+          `Canonical: ${model.canonical_slug || '-'}`,
+          `Context_Length: ${formatNumber(model.context_length || 0)}`,
+          `Prompt(Input): ${model.pricing?.prompt ?? '-'}`,
+          `Completion(Output): ${model.pricing?.completion ?? '-'}`,
         ].join('\n');
       };
 
@@ -407,7 +418,7 @@
         } catch (fileError) {
           el.loadBar.style.display = 'flex';
           el.modelSearch.disabled = true;
-          el.loadStatus.textContent = 'Local models.json could not be loaded from file://. Load it manually or use the remote source.';
+          el.loadStatusText.textContent = 'Local models.json could not be loaded from file://. Load it manually or use the remote source.';
 
           try {
             const models = await loadModelsFromRemote();
@@ -415,7 +426,8 @@
           } catch (remoteError) {
             el.loadBar.style.display = 'flex';
             el.modelSearch.disabled = true;
-            el.modelPreview.textContent = `Failed to load models: ${fileError.message}. Remote fallback failed: ${remoteError.message}`;
+            el.loadStatusText.textContent = `Failed to load models: ${fileError.message}. Remote fallback failed: ${remoteError.message}`;
+            el.modelPreview.textContent = 'Choose a model to see details.';
             el.modelCount.textContent = '0 / 0';
           }
         }
@@ -443,7 +455,9 @@
       });
 
       loadModels().catch((error) => {
-        el.modelPreview.textContent = `Failed to load models: ${error.message}`;
+        el.modelSearch.disabled = true;
+        el.loadBar.style.display = 'flex';
+        el.loadStatusText.textContent = `Failed to load models: ${error.message}`;
         el.modelCount.textContent = '0 / 0';
       });
     </script>
