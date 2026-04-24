@@ -70,7 +70,7 @@
       }
       .results {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 14px;
       }
       .result {
@@ -91,6 +91,8 @@
         border: 1px solid #243045;
         color: #cbd5e1;
         white-space: pre-wrap;
+        font-size: 13px;
+        line-height: 1.5;
       }
       .model-list {
         max-height: 320px;
@@ -127,8 +129,27 @@
       .value {
         font-variant-numeric: tabular-nums;
       }
-      @media (max-width: 900px) {
+      @media (max-width: 1024px) {
         .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; }
+      }
+
+      @media (max-width: 600px) {
+        body {
+          padding: 12px;
+        }
+
+        .card {
+          padding: 14px;
+          border-radius: 14px;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        .model-list {
+          max-height: 240px;
+        }
       }
     </style>
   </head>
@@ -179,7 +200,7 @@
 
       <section class="card grid cols-3">
         <label>
-          Context Ratio
+          Context Ratio (input length : output length)
           <input id="contextRatio" type="number" step="any" min="0.0001" value="50" />
         </label>
         <label>
@@ -187,15 +208,15 @@
           <input id="tpm" type="number" step="any" min="0" value="1" />
         </label>
         <label>
-          Time (m)
+          Time (Minutes)
           <input id="time" type="number" step="any" min="0" value="60" />
         </label>
         <label>
-          Exchange Rate
+          Exchange Rate ($ : ￥) 
           <input id="exchangeRate" type="number" step="any" min="0" value="7.0" />
         </label>
         <label>
-          Discount
+          Discount (0.0 ~ 1.0)
           <input id="discount" type="number" step="any" min="0" value="0.99" />
         </label>
       </section>
@@ -204,24 +225,24 @@
         <h2 style="font-size: 18px; margin-bottom: 14px;">Results</h2>
         <div class="results">
           <div class="result">
-            <span class="muted small">Result #1</span>
+            <span class="muted small">Result 1</span>
             <strong class="value" id="tokensResult">0 M</strong>
             <div class="small muted">Tokens = TPM × Time × TOKENS_SCALE</div>
           </div>
           <div class="result">
-            <span class="muted small">Result #2</span>
+            <span class="muted small">Result 2</span>
             <strong class="value" id="chargeResult">0 $</strong>
             <div class="small muted">Charge Fee = Tokens × Input_Price + Tokens / Context_Ratio × Output_Price</div>
           </div>
           <div class="result">
-            <span class="muted small">Result #3</span>
+            <span class="muted small">Result 3</span>
             <strong class="value" id="discountResult">0 $</strong>
             <div class="small muted">Charge after Discount = Charge Fee × Discount</div>
           </div>
           <div class="result">
-            <span class="muted small">Converted total</span>
-            <strong class="value" id="convertedResult">0</strong>
-            <div class="small muted">Converted total = Charge Fee × Discount × Exchange Rate</div>          </div>
+            <span class="muted small">Converted Total</span>
+            <strong class="value" id="convertedResult">0 ￥</strong>
+            <div class="small muted">Converted Total = Charge Fee × Discount × Exchange Rate</div>          </div>
         </div>
       </section>
     </main>
@@ -282,9 +303,8 @@
       };
 
       const normalizeModels = (data) => {
-        if (Array.isArray(data?.data)) return data.data;
-        if (Array.isArray(data)) return data;
-        return [];
+        const models = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+        return models.filter((model) => !String(model?.id || '').endsWith(':free'));
       };
 
       const setModels = (models, sourceLabel) => {
@@ -334,10 +354,10 @@
         el.modelPreview.textContent = [
           `id: ${model.id}`,
           `name: ${model.name || '-'}`,
-          `context_length: ${formatNumber(model.context_length || 0)}`,
-          `prompt: ${model.pricing?.prompt ?? '-'}`,
-          `completion: ${model.pricing?.completion ?? '-'}`,
           `canonical_slug: ${model.canonical_slug || '-'}`,
+          `context_length: ${formatNumber(model.context_length || 0)}`,
+          `prompt(input): ${model.pricing?.prompt ?? '-'}`,
+          `completion(output): ${model.pricing?.completion ?? '-'}`,
         ].join('\n');
       };
 
@@ -367,7 +387,7 @@
         el.tokensResult.textContent = `${formatNumber(tokens)} M`;
         el.chargeResult.textContent = `${formatMoney(chargeFee)} $`;
         el.discountResult.textContent = `${formatMoney(chargeAfterDiscount)} $`;
-        el.convertedResult.textContent = formatMoney(converted);
+        el.convertedResult.textContent = `${formatMoney(converted)} ￥`;
       };
 
       const loadModelsFromRemote = async () => {
